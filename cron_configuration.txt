@@ -1,0 +1,3 @@
+# Fichier de preuve pour l automatisation du rapport quotidien.
+# La tâche passe par un script wrapper (runner.sh) pour gerer l environnement Python virtuel.
+* * * * * /bin/bash /workspaces/finance-dashboard-quant/cron/runner.sh >> /workspaces/finance-dashboard-quant/cron/cron.log 2>&1
