@@ -1,53 +1,47 @@
-# cron/daily_report.py
-
 import os
 import sys
 import datetime as dt
 import pandas as pd
 
-# --- Ajouter la racine du projet au PYTHONPATH ---
-# Chemin du dossier courant (cron)
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Path configuration to include the project root in the PYTHONPATH
+# This ensures imports from the 'app' directory work correctly when run as a script
+current_path = os.path.dirname(os.path.abspath(__file__))
+root_path = os.path.dirname(current_path)
 
-# Chemin de la racine du projet (un niveau au-dessus)
-ROOT_DIR = os.path.dirname(CURRENT_DIR)
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
 
-# On ajoute la racine du projet au sys.path si besoin
-if ROOT_DIR not in sys.path:
-    sys.path.insert(0, ROOT_DIR)
-
-# Maintenant on peut importer depuis app.single_asset
+# Import logic from the core calculation module
 from app.single_asset import fetch_data, compute_returns, compute_metrics
 
-# Liste d'actifs à suivre dans le rapport quotidien
-TICKERS = ["BTC-USD", "AAPL", "MSFT"]
-
+# List of assets to be monitored in the automated daily report
+WATCHLIST = ["BTC-USD", "AAPL", "MSFT"]
 
 def generate_daily_report():
     """
-    Génère un rapport CSV des métriques de base pour chaque ticker.
+    Retrieves historical data for the watchlist and exports key metrics to a CSV report.
     """
-    rows = []
+    report_entries = []
 
-    for ticker in TICKERS:
+    for ticker in WATCHLIST:
         try:
-            # On prend par exemple 1 an de données en daily
-            data = fetch_data(ticker, period="1y", interval="1d")
+            # Use 1 year of daily historical data for standard metric calculations
+            market_data = fetch_data(ticker, period="1y", interval="1d")
 
-            returns = compute_returns(data["Close"])
-            metrics = compute_metrics(returns, data["Close"])
+            returns = compute_returns(market_data["Close"])
+            performance_metrics = compute_metrics(returns, market_data["Close"])
 
-            row = {
+            entry = {
                 "ticker": ticker,
-                "cumulative_return": metrics["cumulative_return"],
-                "vol_daily": metrics["vol_daily"],
-                "sharpe": metrics["sharpe"],
-                "max_drawdown": metrics["max_drawdown"],
+                "cumulative_return": performance_metrics["cumulative_return"],
+                "vol_daily": performance_metrics["vol_daily"],
+                "sharpe": performance_metrics["sharpe"],
+                "max_drawdown": performance_metrics["max_drawdown"],
             }
 
         except Exception as e:
-            # En cas de problème sur un ticker, on l'indique quand même dans le rapport
-            row = {
+            # If processing fails for a specific ticker, log the error within the report
+            entry = {
                 "ticker": ticker,
                 "cumulative_return": None,
                 "vol_daily": None,
@@ -56,21 +50,22 @@ def generate_daily_report():
                 "error": str(e),
             }
 
-        rows.append(row)
+        report_entries.append(entry)
 
-    # Création du DataFrame
-    df = pd.DataFrame(rows)
+    # Create summary DataFrame
+    summary_df = pd.DataFrame(report_entries)
 
-    # Dossier de sortie pour les rapports
-    reports_dir = os.path.join(ROOT_DIR, "reports")
-    os.makedirs(reports_dir, exist_ok=True)
+    # Manage directory structure for automated exports
+    reports_directory = os.path.join(root_path, "reports")
+    os.makedirs(reports_directory, exist_ok=True)
 
-    today = dt.date.today().strftime("%Y-%m-%d")
-    filename = os.path.join(reports_dir, f"daily_report_{today}.csv")
+    # Generate dated filename for archival purposes
+    datestamp = dt.date.today().strftime("%Y-%m-%d")
+    output_file = os.path.join(reports_directory, f"daily_report_{datestamp}.csv")
 
-    df.to_csv(filename, index=False, float_format="%.6f")
-    print(f"Rapport sauvegardé dans : {filename}")
-
+    # Export metrics using high float precision
+    summary_df.to_csv(output_file, index=False, float_format="%.6f")
+    print(f"Successfully generated daily report: {output_file}")
 
 if __name__ == "__main__":
     generate_daily_report()
