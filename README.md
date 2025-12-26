@@ -51,7 +51,8 @@ Install the required dependencies: pip install -r requirements.txt
 Launch the Streamlit application: streamlit run app/main.py
 
 Automated Reporting
-The project includes a background task located in the cron/ directory. This script is designed to be scheduled via a Linux crontab to generate automated performance reports in the reports/ folder every 24 hours.
+A performance report is automatically generated every day at midnight (00:00) via a Linux Cron job. The execution is handled by cron/runner.sh, which saves the results as CSV files in the reports/ directory on the AWS server.
+(Note: This folder is ignored by Git (.gitignore) to keep the repository clean and separate production data from the source code)
 
 Deployment
 The application is optimized for deployment on AWS (EC2) using an Ubuntu environment. It utilizes nohup to maintain a persistent background process, allowing the dashboard to remain accessible via a public IP on port 8501.
