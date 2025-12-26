@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# 1. On se déplace à la racine du projet (C'est CRUCIAL pour les imports Python)
+# Navigate to the project root directory to ensure Python module imports resolve correctly
 cd /workspaces/finance-dashboard-quant
 
-# 2. On écrit la date dans le log pour prouver que ça se lance
-echo "Lancement du Cron à $(date)"
+# Log the execution timestamp for monitoring and debugging purposes
+echo "Cron job execution started at $(date)"
 
-# 3. On lance le script Python avec le bon interpréteur
+# Execute the daily report generator using the project-specific Python interpreter
 /home/codespace/.python/current/bin/python cron/daily_report.py
