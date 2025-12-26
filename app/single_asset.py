@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import streamlit as st
 import plotly.express as px
+from sklearn.linear_model import LinearRegression
 
 def fetch_data(ticker: str, period: str, interval: str) -> pd.DataFrame:
     """Download market data and handle multi-index columns from yfinance."""
@@ -79,3 +80,22 @@ def moving_average_strategy(prices: pd.Series, short_window: int = 20, long_wind
         "short_ma": fast_ma,
         "long_ma": slow_ma
     }
+def run_linear_regression(prices: pd.Series, forecast_days: int = 30):
+    """
+    Perform a simple linear regression to forecast future price trends.
+    """
+    # Prepare data for regression (using index as X)
+    y = prices.values.reshape(-1, 1)
+    X = np.arange(len(y)).reshape(-1, 1)
+
+    model = LinearRegression()
+    model.fit(X, y)
+
+    # Predict historical trend
+    trend = model.predict(X).flatten()
+
+    # Forecast future points
+    future_X = np.arange(len(y), len(y) + forecast_days).reshape(-1, 1)
+    forecast = model.predict(future_X).flatten()
+
+    return trend, forecast
