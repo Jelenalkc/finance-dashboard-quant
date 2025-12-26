@@ -22,6 +22,9 @@ Dynamic weight allocation and rebalancing simulation.
 Project Structure
 Plaintext
 
+## Project Structure
+
+```text
 finance-dashboard-quant/
 ├── app/
 │   ├── main.py            # Streamlit entry point and navigation logic
@@ -36,6 +39,7 @@ finance-dashboard-quant/
 │
 ├── requirements.txt       # Project dependencies (Streamlit, Pandas, Plotly, etc.)
 └── README.md              # Project documentation
+```
 Installation and Setup
 Local Environment
 To run the dashboard locally, ensure you have Python 3.9+ installed, then follow these steps:
