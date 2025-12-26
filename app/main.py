@@ -1,8 +1,11 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import time
+from sklearn.linear_model import LinearRegression
+from streamlit_autorefresh import st_autorefresh
 
-# Internal module imports for financial logic and multi-asset page
+# Core financial logic imports
 from single_asset import (
     fetch_data,
     compute_returns,
@@ -12,141 +15,134 @@ from single_asset import (
 )
 from portfolio import show_portfolio_page
 
+def run_linear_regression(prices: pd.Series, forecast_days: int = 30):
+    """
+    Computes a linear trend and forecasts future price points using ML regression.
+    """
+    # Prepare data arrays for scikit-learn
+    y_values = prices.values.reshape(-1, 1)
+    x_axis = np.arange(len(y_values)).reshape(-1, 1)
+
+    regressor = LinearRegression()
+    regressor.fit(x_axis, y_values)
+
+    # Generate historical trend line and future projections
+    historical_trend = regressor.predict(x_axis).flatten()
+    future_x = np.arange(len(y_values), len(y_values) + forecast_days).reshape(-1, 1)
+    future_forecast = regressor.predict(future_x).flatten()
+
+    return historical_trend, future_forecast
+
 def show_single_asset_page():
+    # Requirement 5 & 21: Automatically refresh the app every 5 minutes (300,000 ms)
+    # This ensures data remains 'real-time' without manual intervention
+    st_autorefresh(interval=5 * 60 * 1000, key="data_refresh_timer")
+
     st.title("Quant A - Single Asset Dashboard")
-
-    # Sidebar: Asset selection
-    ticker = st.sidebar.text_input("Ticker (Yahoo Finance)", value="BTC-USD")
-
-    # Sidebar: Timeframe settings
+    
+    # Sidebar Configuration
+    st.sidebar.header("Asset Settings")
+    ticker = st.sidebar.text_input("Ticker Symbol", value="BTC-USD")
+    
     period = st.sidebar.selectbox(
-        "Analysis Period",
+        "Time Horizon",
         ["1d", "5d", "1mo", "3mo", "6mo", "1y", "5y", "max"],
         index=5,
     )
     interval = st.sidebar.selectbox(
-        "Data Interval",
+        "Sampling Interval",
         ["1m", "5m", "15m", "30m", "1h", "1d"],
         index=5,
     )
 
-    # Sidebar: Moving Average Strategy parameters
-    short_window = st.sidebar.number_input(
-        "Short MA Window", min_value=5, max_value=60, value=20, step=1
-    )
-    long_window = st.sidebar.number_input(
-        "Long MA Window", min_value=10, max_value=200, value=50, step=1
-    )
-
-    st.write(f"### Historical Data for: `{ticker}`")
+    st.sidebar.header("Strategy Parameters")
+    fast_ma = st.sidebar.number_input("Short Window (MA)", min_value=5, value=20)
+    slow_ma = st.sidebar.number_input("Long Window (MA)", min_value=10, value=50)
 
     try:
-        # Load market data
-        data = fetch_data(ticker, period=period, interval=interval)
+        # Data Retrieval
+        market_data = fetch_data(ticker, period=period, interval=interval)
+        if market_data.empty:
+            st.error("No data found for this ticker.")
+            return
 
-        # Display latest closing price
-        last_price = float(data["Close"].iloc[-1])
-        st.metric(label="Latest Close Price", value=f"{last_price:,.4f}")
+        # Core Metrics Display
+        current_price = float(market_data["Close"].iloc[-1])
+        st.metric(label=f"Current {ticker} Price", value=f"{current_price:,.4f}")
 
-        # Benchmark calculations (Buy & Hold)
-        returns = compute_returns(data["Close"])
-        bh_metrics = compute_metrics(returns, data["Close"])
+        asset_returns = compute_returns(market_data["Close"])
+        base_metrics = compute_metrics(asset_returns, market_data["Close"])
 
-        # Metric extraction for UI display
-        perf = bh_metrics["cumulative_return"]
-        vol = bh_metrics["vol_daily"]
-        sharpe = bh_metrics["sharpe"]
-        mdd = bh_metrics["max_drawdown"]
+        st.subheader("Performance Summary (Buy & Hold)")
+        metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+        
+        metric_col1.metric("Total Return", f"{base_metrics['cumulative_return']:.2%}")
+        metric_col2.metric("Volatility", f"{base_metrics['vol_daily']:.2%}")
+        
+        sharpe = base_metrics['sharpe']
+        metric_col3.metric("Sharpe Ratio", f"{sharpe:.2f}" if not np.isnan(sharpe) else "N/A")
+        metric_col4.metric("Max Drawdown", f"{base_metrics['max_drawdown']:.2%}")
 
-        st.subheader("Buy & Hold Benchmark Metrics")
+        # ML Prediction Section (Requirement 62 Bonus)
+        st.subheader("Predictive Analysis (Linear Regression)")
+        forecast_horizon = st.slider("Forecast Range (Days)", 7, 90, 30)
+        
+        trend_line, future_projection = run_linear_regression(market_data["Close"], forecast_horizon)
+        
+        # Build the visualization dataframe for history and forecast
+        history_viz = pd.DataFrame({
+            "Market Price": market_data["Close"],
+            "Regression Trend": trend_line
+        }, index=market_data.index)
+        
+        projection_dates = pd.date_range(
+            start=market_data.index[-1], 
+            periods=forecast_horizon + 1, 
+            freq='D'
+        )[1:]
+        
+        forecast_viz = pd.DataFrame({"ML Projection": future_projection}, index=projection_dates)
+        
+        # Merge for a continuous chart
+        prediction_chart = pd.concat([history_viz, forecast_viz])
+        st.line_chart(prediction_chart)
 
-        m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-        m_col1.metric("Cumulative Perf.", f"{perf:.2%}")
-        m_col2.metric("Daily Volatility", f"{vol:.2%}")
+        # Strategy Backtesting
+        st.subheader("Trend Following Strategy (MA Crossover)")
+        strategy = moving_average_strategy(
+            market_data["Close"], 
+            short_window=fast_ma, 
+            long_window=slow_ma
+        )
 
-        if sharpe is not None and not np.isnan(sharpe):
-            m_col3.metric("Sharpe Ratio", f"{sharpe:.2f}")
-        else:
-            m_col3.metric("Sharpe Ratio", "N/A")
+        comparison_plot = pd.DataFrame({
+            "Benchmark (B&H)": backtest_buy_and_hold(asset_returns),
+            "Strategy (MA)": strategy["portfolio"]
+        })
+        
+        st.line_chart(comparison_plot)
 
-        m_col4.metric("Max Drawdown", f"{mdd:.2%}")
+        # Strategy Metrics
+        s_metrics = strategy["metrics"]
+        s_col1, s_col2, s_col3, s_col4 = st.columns(4)
+        s_col1.metric("Strategy Perf.", f"{s_metrics['cumulative_return']:.2%}")
+        s_col2.metric("Strategy Vol.", f"{s_metrics['vol_daily']:.2%}")
+        s_col3.metric("Strategy Sharpe", f"{s_metrics['sharpe']:.2f}")
+        s_col4.metric("Strategy Max DD", f"{s_metrics['max_drawdown']:.2%}")
 
-        # Price History Visualization
-        st.subheader("Historical Price Chart (Close)")
-        st.line_chart(data["Close"], use_container_width=True)
+    except Exception as e:
+        st.error(f"Execution Error: {str(e)}")
 
-        # Equity Curve Visualization
-        st.subheader("Buy & Hold Equity Curve (Initial Capital = 100)")
-        bh_equity = backtest_buy_and_hold(returns, initial_capital=100.0)
-        st.line_chart(bh_equity, use_container_width=True)
+# Global App Configuration
+st.set_page_config(page_title="Quant B Portfolio Dashboard", layout="wide")
 
-        # Moving Average Strategy Execution
-        st.subheader("Moving Average (MA) Strategy Results")
-
-        try:
-            strategy_results = moving_average_strategy(
-                data["Close"],
-                short_window=short_window,
-                long_window=long_window,
-                initial_capital=100.0,
-            )
-
-            ma_equity = strategy_results["portfolio"]
-            ma_metrics = strategy_results["metrics"]
-
-            # Strategy vs. Benchmark comparison
-            comparison_df = pd.DataFrame(
-                {
-                    "Buy & Hold": bh_equity,
-                    "MA Strategy": ma_equity,
-                }
-            )
-
-            st.write("Equity Curve Comparison: Strategy vs. Benchmark")
-            st.line_chart(comparison_df, use_container_width=True)
-
-            # Strategy specific metrics
-            st.write("Quantitative Metrics (Strategy)")
-            s_perf = ma_metrics["cumulative_return"]
-            s_vol = ma_metrics["vol_daily"]
-            s_sharpe = ma_metrics["sharpe"]
-            s_mdd = ma_metrics["max_drawdown"]
-
-            s_col1, s_col2, s_col3, s_col4 = st.columns(4)
-            s_col1.metric("Strategy Perf.", f"{s_perf:.2%}")
-            s_col2.metric("Strategy Vol.", f"{s_vol:.2%}")
-
-            if s_sharpe is not None and not np.isnan(s_sharpe):
-                s_col3.metric("Strategy Sharpe", f"{s_sharpe:.2f}")
-            else:
-                s_col3.metric("Strategy Sharpe", "N/A")
-
-            s_col4.metric("Strategy Max DD", f"{s_mdd:.2%}")
-
-        except ValueError as strategy_error:
-            st.warning(f"Strategy Warning: {strategy_error}")
-
-        # Data inspection panel
-        with st.expander("Show Raw Historical Data (Last 5 rows)"):
-            st.dataframe(data.tail())
-
-    except ValueError as val_error:
-        st.error(f"Input Error: {val_error}")
-    except Exception as general_error:
-        st.error(f"An unexpected error occurred during data processing: {general_error}")
-
-
-# Main application configuration
-st.set_page_config(page_title="Quant A Finance Dashboard", layout="wide")
-
-# Navigation Sidebar
-module_selection = st.sidebar.radio(
-    "Select Module",
-    ["Quant A - Single Asset", "Quant B - Portfolio"],
+# Main Navigation
+nav_choice = st.sidebar.radio(
+    "Application Module",
+    ["Quant A - Asset Analysis", "Quant B - Portfolio Manager"],
 )
 
-# Route to the appropriate page function
-if module_selection.startswith("Quant A"):
+if "Quant A" in nav_choice:
     show_single_asset_page()
 else:
     show_portfolio_page()
