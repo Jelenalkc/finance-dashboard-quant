@@ -1,4 +1,4 @@
-Quantitative Finance Dashboard
+
 This project is a comprehensive financial analytics platform built with Python and Streamlit. It integrates real-time market data to provide quantitative insights into individual assets and multi-asset portfolios.
 
 The application is divided into two specialized modules:
