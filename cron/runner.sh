@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Navigate to the project root directory to ensure Python module imports resolve correctly
-cd /workspaces/finance-dashboard-quant
+# Navigate to your project directory on the AWS server
+cd /home/ubuntu/finance-dashboard-quant
 
-# Log the execution timestamp for monitoring and debugging purposes
-echo "Cron job execution started at $(date)"
+# Log the execution timestamp to a specific log file for monitoring
+echo "Cron job execution started at $(date)" >> /home/ubuntu/finance-dashboard-quant/cron/cron_log.txt
 
-# Execute the daily report generator using the project-specific Python interpreter
-/home/codespace/.python/current/bin/python cron/daily_report.py
+# Execute the script using the standard Python3 interpreter installed on Ubuntu
+/usr/bin/python3 cron/daily_report.py >> /home/ubuntu/finance-dashboard-quant/cron/cron_log.txt 2>&1
